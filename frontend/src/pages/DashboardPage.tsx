@@ -32,8 +32,7 @@ import {
 import { useAppStore } from '@/lib/store';
 import { Hotspot } from '@/lib/types';
 import { getZoneDisplayName } from '@/lib/utils';
-import { DEMO_HOTSPOTS } from '@/lib/demoData';
-import { ambulances as DEMO_AMBULANCES } from '@/lib/demoData';
+import { zones as DEMO_ZONES, ambulances as DEMO_AMBULANCES } from '@/lib/demoData';
 
 import {
   BarChart,
@@ -52,17 +51,19 @@ import {
 } from 'recharts';
 
 export const Dashboard: React.FC = () => {
-
-  // Keep backend hooks available, but display demo data
   const { refetch: refetchAmbulances } = useAmbulances();
   const { refetch: refetchHotspots } = useHotspots();
-
   const { status: allocationStatus } = useAutoAllocation();
 
-  // Always use demo data
-  const hotspots: Hotspot[] = DEMO_HOTSPOTS;
+  const autoFetchEnabled = useAppStore(
+    (state) => state.autoFetchEnabled
+  );
 
-  // Convert demo ambulance statuses to dashboard statuses
+  const setAutoFetchEnabled = useAppStore(
+    (state) => state.setAutoFetchEnabled
+  );
+
+  // Convert hardcoded ambulance data
   const ambulances = DEMO_AMBULANCES.map((ambulance) => ({
     ...ambulance,
     status:
@@ -75,13 +76,28 @@ export const Dashboard: React.FC = () => {
         : 'MAINTENANCE',
   }));
 
-  const autoFetchEnabled = useAppStore(
-    (state) => state.autoFetchEnabled
-  );
+  // Convert hardcoded zones into hotspot data
+  const hotspots: Hotspot[] = DEMO_ZONES.map((zone) => {
+    const risk = String(zone.risk).toLowerCase();
 
-  const setAutoFetchEnabled = useAppStore(
-    (state) => state.setAutoFetchEnabled
-  );
+    const riskScores: Record<string, number> = {
+      critical: 90,
+      high: 75,
+      medium: 50,
+      low: 25,
+    };
+
+    return {
+      id: String(zone.id),
+      zone_id: String(zone.id),
+      zone_name: zone.name,
+      area: zone.name,
+      risk_class: risk,
+      predicted_calls: Number(zone.calls),
+      risk_score: riskScores[risk] ?? 0,
+      timestamp: new Date().toISOString(),
+    } as unknown as Hotspot;
+  });
 
   // Dashboard statistics
   const stats = {
@@ -103,91 +119,62 @@ export const Dashboard: React.FC = () => {
       (a) => a.status === 'MAINTENANCE'
     ).length,
 
-    criticalZones: hotspots.filter(
-      (h: Hotspot) => h.risk_class === 'critical'
+    criticalZones: DEMO_ZONES.filter(
+      (zone) => String(zone.risk).toLowerCase() === 'critical'
     ).length,
 
-    activeIncidents: hotspots.filter(
-      (h: Hotspot) => h.predicted_calls > 5
-    ).length,
+    activeIncidents: DEMO_ZONES.reduce(
+      (total, zone) => total + Number(zone.calls || 0),
+      0
+    ),
   };
 
   // Risk distribution
   const riskDistribution = [
     {
       risk: 'Critical',
-      count: hotspots.filter(
-        (h: Hotspot) => h.risk_class === 'critical'
-      ).length,
+      count: hotspots.filter((h) => h.risk_class === 'critical').length,
       fill: '#dc2626',
     },
     {
       risk: 'High',
-      count: hotspots.filter(
-        (h: Hotspot) => h.risk_class === 'high'
-      ).length,
+      count: hotspots.filter((h) => h.risk_class === 'high').length,
       fill: '#f97316',
     },
     {
       risk: 'Medium',
-      count: hotspots.filter(
-        (h: Hotspot) => h.risk_class === 'medium'
-      ).length,
+      count: hotspots.filter((h) => h.risk_class === 'medium').length,
       fill: '#eab308',
     },
     {
       risk: 'Low',
-      count: hotspots.filter(
-        (h: Hotspot) => h.risk_class === 'low'
-      ).length,
+      count: hotspots.filter((h) => h.risk_class === 'low').length,
       fill: '#22c55e',
     },
   ];
 
   // Top demand zones
   const topHotspots = [...hotspots]
-    .sort(
-      (a: Hotspot, b: Hotspot) =>
-        b.predicted_calls - a.predicted_calls
-    )
+    .sort((a, b) => b.predicted_calls - a.predicted_calls)
     .slice(0, 5)
-    .map((h: Hotspot) => ({
-      zone:
-        h.area ||
-        h.zone_name ||
-        getZoneDisplayName(h.zone_id),
+    .map((h) => ({
+      zone: h.area || h.zone_name || getZoneDisplayName(h.zone_id),
       calls: h.predicted_calls,
       risk: h.risk_score,
     }));
 
   // Fleet status
   const statusBreakdown = [
-    {
-      status: 'Available',
-      count: stats.available,
-      fill: '#22c55e',
-    },
-    {
-      status: 'Moving',
-      count: stats.moving,
-      fill: '#3b82f6',
-    },
-    {
-      status: 'Occupied',
-      count: stats.occupied,
-      fill: '#ef4444',
-    },
-    {
-      status: 'Maintenance',
-      count: stats.maintenance,
-      fill: '#64748b',
-    },
+    { status: 'Available', count: stats.available, fill: '#22c55e' },
+    { status: 'Moving', count: stats.moving, fill: '#3b82f6' },
+    { status: 'Occupied', count: stats.occupied, fill: '#ef4444' },
+    { status: 'Maintenance', count: stats.maintenance, fill: '#64748b' },
   ];
 
   // Recent predictions
   const recentHotspots = [...hotspots]
     .sort(
-      (a: Hotspot, b: Hotspot) =>
+      (a, b) =>
         new Date(b.timestamp).getTime() -
         new Date(a.timestamp).getTime()
     )
@@ -205,7 +192,7 @@ export const Dashboard: React.FC = () => {
           </h1>
 
           <p className="mt-2 text-slate-600 dark:text-slate-400">
-            Real-time ambulance optimization & demand prediction
+            Ambulance optimization & demand prediction
             {' • '}
             {autoFetchEnabled
               ? 'Auto-updating enabled'
@@ -215,9 +202,7 @@ export const Dashboard: React.FC = () => {
 
         <div className="flex gap-2">
           <button
-            onClick={() =>
-              setAutoFetchEnabled(!autoFetchEnabled)
-            }
+            onClick={() => setAutoFetchEnabled(!autoFetchEnabled)}
             className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
               autoFetchEnabled
                 ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200'
@@ -251,9 +236,7 @@ export const Dashboard: React.FC = () => {
                 <Zap className="text-blue-600 h-5 w-5" />
               </div>
               <div>
-                <p className="font-medium">
-                  Running Allocation Algorithm...
-                </p>
+                <p className="font-medium">Running Allocation Algorithm...</p>
                 <p className="text-sm text-slate-600">
                   Optimizing ambulance dispatch
                 </p>
@@ -265,9 +248,7 @@ export const Dashboard: React.FC = () => {
             <>
               <CheckCircle className="text-green-600 h-5 w-5" />
               <div>
-                <p className="font-medium">
-                  Allocation Optimized ✓
-                </p>
+                <p className="font-medium">Allocation Optimized ✓</p>
                 <p className="text-sm text-slate-600">
                   Last run completed successfully
                 </p>
@@ -279,9 +260,7 @@ export const Dashboard: React.FC = () => {
             <>
               <AlertCircle className="text-red-600 h-5 w-5" />
               <div>
-                <p className="font-medium">
-                  Allocation Error
-                </p>
+                <p className="font-medium">Allocation Error</p>
                 <p className="text-sm text-slate-600">
                   The allocation algorithm encountered an error
                 </p>
@@ -367,13 +346,9 @@ export const Dashboard: React.FC = () => {
                 <XAxis dataKey="risk" />
                 <YAxis />
                 <Tooltip />
-
                 <Bar dataKey="count" fill="#3b82f6">
                   {riskDistribution.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.fill}
-                    />
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Bar>
               </BarChart>
@@ -397,18 +372,13 @@ export const Dashboard: React.FC = () => {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ status, count }) =>
-                    `${status}: ${count}`
-                  }
+                  label={({ status, count }) => `${status}: ${count}`}
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="count"
                 >
                   {statusBreakdown.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.fill}
-                    />
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -434,7 +404,6 @@ export const Dashboard: React.FC = () => {
               <LineChart data={topHotspots}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="zone" />
-
                 <YAxis
                   yAxisId="left"
                   label={{
@@ -443,7 +412,6 @@ export const Dashboard: React.FC = () => {
                     position: 'insideLeft',
                   }}
                 />
-
                 <YAxis
                   yAxisId="right"
                   orientation="right"
@@ -453,10 +421,8 @@ export const Dashboard: React.FC = () => {
                     position: 'insideRight',
                   }}
                 />
-
                 <Tooltip />
                 <Legend />
-
                 <Line
                   yAxisId="left"
                   type="monotone"
@@ -464,7 +430,6 @@ export const Dashboard: React.FC = () => {
                   stroke="#3b82f6"
                   name="Predicted Calls"
                 />
-
                 <Line
                   yAxisId="right"
                   type="monotone"
@@ -494,11 +459,8 @@ export const Dashboard: React.FC = () => {
 
         {recentHotspots.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {recentHotspots.map((hotspot: Hotspot) => (
-              <HotspotCard
-                key={hotspot.id}
-                hotspot={hotspot}
-              />
+            {recentHotspots.map((hotspot) => (
+              <HotspotCard key={hotspot.id} hotspot={hotspot} />
             ))}
           </div>
         ) : (
