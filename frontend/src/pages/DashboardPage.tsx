@@ -30,9 +30,10 @@ import {
 } from '@/hooks/useData';
 
 import { useAppStore } from '@/lib/store';
-import { Ambulance, Hotspot } from '@/lib/types';
+import { Hotspot } from '@/lib/types';
 import { getZoneDisplayName } from '@/lib/utils';
 import { DEMO_HOTSPOTS } from '@/lib/demoData';
+import { ambulances as DEMO_AMBULANCES } from '@/lib/demoData';
 
 import {
   BarChart,
@@ -51,21 +52,28 @@ import {
 } from 'recharts';
 
 export const Dashboard: React.FC = () => {
-  const {
-    data: ambulances = [],
-    isLoading: loadingAmbulances,
-    refetch: refetchAmbulances,
-  } = useAmbulances();
+
+  // Keep backend hooks available, but display demo data
+  const { refetch: refetchAmbulances } = useAmbulances();
+  const { refetch: refetchHotspots } = useHotspots();
 
   const { status: allocationStatus } = useAutoAllocation();
 
-  const {
-    refetch: refetchHotspots,
-  } = useHotspots();
-
-  // Always use demo hotspot data
-  const usingDemo = true;
+  // Always use demo data
   const hotspots: Hotspot[] = DEMO_HOTSPOTS;
+
+  // Convert demo ambulance statuses to dashboard statuses
+  const ambulances = DEMO_AMBULANCES.map((ambulance) => ({
+    ...ambulance,
+    status:
+      ambulance.status === 'Idle'
+        ? 'AVAILABLE'
+        : ambulance.status === 'Moving'
+        ? 'MOVING'
+        : ambulance.status === 'Busy'
+        ? 'OCCUPIED'
+        : 'MAINTENANCE',
+  }));
 
   const autoFetchEnabled = useAppStore(
     (state) => state.autoFetchEnabled
@@ -75,28 +83,24 @@ export const Dashboard: React.FC = () => {
     (state) => state.setAutoFetchEnabled
   );
 
-  // Calculate dashboard statistics
+  // Dashboard statistics
   const stats = {
     totalAmbulances: ambulances.length,
 
     available: ambulances.filter(
-      (a: Ambulance) =>
-        a.status?.toUpperCase() === 'AVAILABLE'
+      (a) => a.status === 'AVAILABLE'
     ).length,
 
     moving: ambulances.filter(
-      (a: Ambulance) =>
-        a.status?.toUpperCase() === 'MOVING'
+      (a) => a.status === 'MOVING'
     ).length,
 
     occupied: ambulances.filter(
-      (a: Ambulance) =>
-        a.status?.toUpperCase() === 'OCCUPIED'
+      (a) => a.status === 'OCCUPIED'
     ).length,
 
     maintenance: ambulances.filter(
-      (a: Ambulance) =>
-        a.status?.toUpperCase() === 'MAINTENANCE'
+      (a) => a.status === 'MAINTENANCE'
     ).length,
 
     criticalZones: hotspots.filter(
@@ -108,7 +112,7 @@ export const Dashboard: React.FC = () => {
     ).length,
   };
 
-  // Risk distribution chart data
+  // Risk distribution
   const riskDistribution = [
     {
       risk: 'Critical',
@@ -140,7 +144,7 @@ export const Dashboard: React.FC = () => {
     },
   ];
 
-  // Top 5 predicted demand zones
+  // Top demand zones
   const topHotspots = [...hotspots]
     .sort(
       (a: Hotspot, b: Hotspot) =>
@@ -156,7 +160,7 @@ export const Dashboard: React.FC = () => {
       risk: h.risk_score,
     }));
 
-  // Ambulance status distribution
+  // Fleet status
   const statusBreakdown = [
     {
       status: 'Available',
@@ -180,7 +184,7 @@ export const Dashboard: React.FC = () => {
     },
   ];
 
-  // Five most recent demo predictions
+  // Recent predictions
   const recentHotspots = [...hotspots]
     .sort(
       (a: Hotspot, b: Hotspot) =>
@@ -192,7 +196,7 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-8">
 
-      {/* Dashboard Header */}
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-4xl font-bold flex items-center gap-2">
@@ -201,23 +205,15 @@ export const Dashboard: React.FC = () => {
           </h1>
 
           <p className="mt-2 text-slate-600 dark:text-slate-400">
-            Ambulance optimization & demand prediction
+            Real-time ambulance optimization & demand prediction
             {' • '}
             {autoFetchEnabled
               ? 'Auto-updating enabled'
               : 'Manual mode - use refresh button below'}
           </p>
-
-          {usingDemo && (
-            <span className="mt-2 inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-              Displaying demo prediction data
-            </span>
-          )}
         </div>
 
-        {/* Dashboard Controls */}
         <div className="flex gap-2">
-
           <button
             onClick={() =>
               setAutoFetchEnabled(!autoFetchEnabled)
@@ -229,9 +225,7 @@ export const Dashboard: React.FC = () => {
             }`}
           >
             <Power className="h-4 w-4" />
-            {autoFetchEnabled
-              ? 'Auto-Fetch ON'
-              : 'Auto-Fetch OFF'}
+            {autoFetchEnabled ? 'Auto-Fetch ON' : 'Auto-Fetch OFF'}
           </button>
 
           <button
@@ -239,21 +233,15 @@ export const Dashboard: React.FC = () => {
               refetchAmbulances();
               refetchHotspots();
             }}
-            disabled={loadingAmbulances}
-            className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-900 dark:text-blue-200"
+            className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200"
           >
-            <RefreshCw
-              className={`h-4 w-4 ${
-                loadingAmbulances ? 'animate-spin' : ''
-              }`}
-            />
+            <RefreshCw className="h-4 w-4" />
             Refresh Now
           </button>
-
         </div>
       </div>
 
-      {/* Auto-Allocation Status */}
+      {/* Allocation Status */}
       <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950">
         <CardContent className="pt-6 flex items-center gap-4">
 
@@ -305,9 +293,7 @@ export const Dashboard: React.FC = () => {
             <>
               <CheckCircle className="text-slate-400 h-5 w-5" />
               <div>
-                <p className="font-medium">
-                  System Idle
-                </p>
+                <p className="font-medium">System Idle</p>
                 <p className="text-sm text-slate-600">
                   Waiting for the next scheduled allocation run
                 </p>
@@ -318,7 +304,7 @@ export const Dashboard: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* KPI Statistics */}
+      {/* KPI Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
 
         <StatCard
@@ -363,15 +349,14 @@ export const Dashboard: React.FC = () => {
 
       </div>
 
-      {/* Charts Row */}
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* Risk Distribution */}
         <Card>
           <CardHeader>
             <CardTitle>Risk Distribution</CardTitle>
             <CardDescription>
-              Current zones by risk level (demo data)
+              Current zones by risk level
             </CardDescription>
           </CardHeader>
 
@@ -396,7 +381,6 @@ export const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Fleet Status */}
         <Card>
           <CardHeader>
             <CardTitle>Fleet Status</CardTitle>
@@ -427,7 +411,6 @@ export const Dashboard: React.FC = () => {
                     />
                   ))}
                 </Pie>
-
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
@@ -436,12 +419,12 @@ export const Dashboard: React.FC = () => {
 
       </div>
 
-      {/* Top Predicted Demand Zones */}
+      {/* Top Demand Zones */}
       <Card>
         <CardHeader>
           <CardTitle>Top Predicted Demand Zones</CardTitle>
           <CardDescription>
-            Top 5 demo zones with highest predicted emergency calls
+            Top 5 zones with highest predicted emergency calls
           </CardDescription>
         </CardHeader>
 
@@ -450,7 +433,6 @@ export const Dashboard: React.FC = () => {
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={topHotspots}>
                 <CartesianGrid strokeDasharray="3 3" />
-
                 <XAxis dataKey="zone" />
 
                 <YAxis
@@ -490,12 +472,11 @@ export const Dashboard: React.FC = () => {
                   stroke="#ef4444"
                   name="Risk Score"
                 />
-
               </LineChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-64 flex items-center justify-center text-slate-500">
-              No demo hotspot data available.
+              No hotspot data available.
             </div>
           )}
         </CardContent>
@@ -504,11 +485,11 @@ export const Dashboard: React.FC = () => {
       {/* Recent Predictions */}
       <div>
         <h2 className="text-2xl font-bold mb-4">
-          Recent Demo Predictions
+          Recent Predictions
         </h2>
 
         <p className="text-slate-600 dark:text-slate-400 mb-4">
-          Displaying predefined demo hotspot predictions
+          Latest demand predictions
         </p>
 
         {recentHotspots.length > 0 ? (
@@ -524,12 +505,11 @@ export const Dashboard: React.FC = () => {
           <Card>
             <CardContent className="pt-6">
               <p className="text-center text-slate-600">
-                No demo hotspots available.
+                No hotspots available.
               </p>
             </CardContent>
           </Card>
         )}
-
       </div>
 
     </div>
