@@ -55,7 +55,7 @@ services:
     rootDir: new-frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
-    plan: free
+ 
     envVars:
       - key: VITE_API_URL
         # Fill in after deploying ambucast-backend above
