@@ -22,7 +22,7 @@ services:
     name: ambucast-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install && npx prisma generate && npm run build
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
     startCommand: npm start
     plan: free
     envVars:
@@ -55,7 +55,7 @@ services:
     rootDir: new-frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
-    plan: free
+ 
     envVars:
       - key: VITE_API_URL
         # Fill in after deploying ambucast-backend above
