@@ -12,58 +12,59 @@ const normalizeRiskClass = (risk: string | undefined) => {
 };
 
 export const buildZonePayloads = async () => {
-    const time = getTimeData();
-    const entries = Object.entries(zones);
+  const time = getTimeData();
+  const entries = Object.entries(zones);
 
-    // Step 1: Build zone data with air & weather
-    
-// Step 1: Build zone data with air & weather
-const results = await Promise.all(
+  // Step 1: Build zone data with air & weather
+  const results = await Promise.all(
     entries.map(async ([zone_id, zone]: any) => {
-        const [airResult, weatherResult] = await Promise.allSettled([
-            getAirData(zone.lat, zone.lng),
-            getWeatherData(zone.lat, zone.lng)
-        ]);
+      const [airResult, weatherResult] = await Promise.allSettled([
+        getAirData(zone.lat, zone.lng),
+        getWeatherData(zone.lat, zone.lng)
+      ]);
 
-        const airAvailable = airResult.status === "fulfilled";
-        const weatherAvailable = weatherResult.status === "fulfilled";
+      const airAvailable = airResult.status === "fulfilled";
+      const weatherAvailable = weatherResult.status === "fulfilled";
 
-        const air: any = airAvailable ? airResult.value : {};
-        const weather: any = weatherAvailable ? weatherResult.value : {};
+      const air: any = airAvailable ? airResult.value : {};
+      const weather: any = weatherAvailable ? weatherResult.value : {};
 
-        if (!airAvailable) {
-            console.warn(`Air quality unavailable for ${zone.name}`);
-        }
+      if (airResult.status === "rejected") {
+        console.warn(
+          `Air quality unavailable for ${zone.name}:`,
+          airResult.reason?.message ?? airResult.reason
+        );
+      }
 
-        if (!weatherAvailable) {
-            console.warn(`Weather unavailable for ${zone.name}`);
-        }
+      if (weatherResult.status === "rejected") {
+        console.warn(
+          `Weather unavailable for ${zone.name}:`,
+          weatherResult.reason?.message ?? weatherResult.reason
+        );
+      }
 
-        return {
-            zone_id,
-            area: zone.name,
-            zone_name: zone.name,
-            ...air,
-            ...weather,
-            aqi: air.aqi ?? null,
-            pm25: air.pm25 ?? null,
-            pm10: air.pm10 ?? null,
-            temperature: weather.temperature ?? null,
-            humidity: weather.humidity ?? null,
-            aqi_available: airAvailable,
-            weather_available: weatherAvailable,
-            ...time,
-            population_density: zone.population_density,
-            elderly_pct: zone.elderly_pct
-        };
+      return {
+        zone_id,
+        area: zone.name,
+        zone_name: zone.name,
+        ...air,
+        ...weather,
+        aqi: air.aqi ?? null,
+        pm25: air.pm25 ?? null,
+        pm10: air.pm10 ?? null,
+        temperature: weather.temperature ?? null,
+        humidity: weather.humidity ?? null,
+        aqi_available: airAvailable,
+        weather_available: weatherAvailable,
+        ...time,
+        population_density: zone.population_density,
+        elderly_pct: zone.elderly_pct
+      };
     })
-);
+  );
 
+  console.log("Zone payloads built:", results.length, "zones");
 
-    console.log("Zone payloads built:", results.length, "zones");
-
-    // Step 2: Get ML predictions ← ADD THIS BLOCK
-    
   // Step 2: Get ML predictions
   const eligibleZones = results.filter(
     zone => zone.aqi_available && zone.weather_available
