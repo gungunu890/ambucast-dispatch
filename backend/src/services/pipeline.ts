@@ -11,6 +11,25 @@ const normalizeRiskClass = (risk: string | undefined) => {
     : 'low';
 };
 
+// Cache air/weather results so we don't hammer OpenWeather on every run.
+// If a fresh call fails (e.g. HTTP 429), we fall back to the last good value.
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const cache = new Map<string, { data: any; ts: number }>();
+
+async function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.data;
+
+  try {
+    const data = await fetcher();
+    cache.set(key, { data, ts: Date.now() });
+    return data;
+  } catch (err) {
+    if (hit) return hit.data; // stale data beats no data
+    throw err;
+  }
+}
+
 export const buildZonePayloads = async () => {
   const time = getTimeData();
   const entries = Object.entries(zones);
@@ -19,8 +38,8 @@ export const buildZonePayloads = async () => {
   const results = await Promise.all(
     entries.map(async ([zone_id, zone]: any) => {
       const [airResult, weatherResult] = await Promise.allSettled([
-        getAirData(zone.lat, zone.lng),
-        getWeatherData(zone.lat, zone.lng)
+        cached(`air:${zone_id}`, () => getAirData(zone.lat, zone.lng)),
+        cached(`weather:${zone_id}`, () => getWeatherData(zone.lat, zone.lng))
       ]);
 
       const airAvailable = airResult.status === "fulfilled";
