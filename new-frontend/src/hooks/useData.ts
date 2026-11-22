@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ambulanceAPI, predictionAPI, allocationAPI, mlAPI, socket } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
-import { DEMO_HOTSPOTS } from '@/lib/demoData';
+import { DEMO_HOTSPOTS, DEMO_AMBULANCES } from '@/lib/demoData';
 
-// Set to true to show sample zone predictions on every page.
-// Set to false to go back to real predictions from the backend.
+// Set to true to show sample data when real data isn't available:
+//  - zone predictions (hotspots) are ALWAYS the sample data
+//  - ambulances use real data when the backend returns some, otherwise the sample fleet
+// Set to false to go back to real data everywhere.
 export const USE_SAMPLE_DATA = true;
 
 // Auto-fetch ambulances with 15 min intervals, real-time updates via Socket.IO
@@ -17,14 +19,39 @@ export const useAmbulances = () => {
   const query = useQuery({
     queryKey: ['ambulances'],
     queryFn: async () => {
-      const response = await ambulanceAPI.fetchAll();
-      setAmbulances(response.data);
-      return response.data;
+      if (!USE_SAMPLE_DATA) {
+        const response = await ambulanceAPI.fetchAll();
+        setAmbulances(response.data);
+        return response.data;
+      }
+
+      // Try the real fleet first; fall back to the sample fleet if it's empty or unreachable
+      try {
+        const response = await ambulanceAPI.fetchAll();
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          setAmbulances(response.data);
+          return response.data;
+        }
+      } catch (error) {
+        console.error('Failed to fetch ambulances, using sample fleet:', error);
+      }
+      return DEMO_AMBULANCES;
     },
+    // initialData puts the sample fleet on screen on the very first render.
+    // initialDataUpdatedAt: 0 marks it as stale, so the real fleet is still fetched right away.
+    initialData: USE_SAMPLE_DATA ? DEMO_AMBULANCES : undefined,
+    initialDataUpdatedAt: 0,
     refetchInterval: autoFetchEnabled ? 15 * 60 * 1000 : false, // 15 minutes if enabled
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
   });
+
+  // Some pages read ambulances from the store, so keep the store in sync with the query data
+  useEffect(() => {
+    if (query.data) {
+      setAmbulances(query.data);
+    }
+  }, [query.data, setAmbulances]);
 
   // Real-time updates via WebSocket
   useEffect(() => {
@@ -51,13 +78,6 @@ export const useHotspots = () => {
   const autoFetchEnabled = useAppStore((state) => state.autoFetchEnabled);
   const queryClient = useQueryClient();
 
-  // Some pages read hotspots from the store, so fill the store with the sample data too
-  useEffect(() => {
-    if (USE_SAMPLE_DATA) {
-      setHotspots(DEMO_HOTSPOTS);
-    }
-  }, [setHotspots]);
-
   const query = useQuery({
     queryKey: ['hotspots'],
     queryFn: async () => {
@@ -79,6 +99,13 @@ export const useHotspots = () => {
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
   });
+
+  // Some pages read hotspots from the store, so keep the store in sync with the query data
+  useEffect(() => {
+    if (query.data) {
+      setHotspots(query.data);
+    }
+  }, [query.data, setHotspots]);
 
   // Real-time updates via WebSocket
   useEffect(() => {
