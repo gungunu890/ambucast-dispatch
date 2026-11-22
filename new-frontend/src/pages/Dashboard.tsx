@@ -10,7 +10,7 @@ import { getZoneDisplayName } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { useQueryClient } from '@tanstack/react-query';
 
-// ─── Sample data, shown immediately and replaced as soon as real data arrives ───
+// ─── Sample data: always used for zone predictions ───
 // Edit the numbers freely. risk_class must be: critical, high, medium or low.
 // risk_score is on a 0-1 scale here; change it if your model uses 0-100.
 const minsAgo = (m: number) => new Date(Date.now() - m * 60 * 1000).toISOString();
@@ -30,18 +30,18 @@ const DEMO_HOTSPOTS = [
   { id: 'demo-12', zone_id: 'demo_vasant_kunj',     area: 'Vasant Kunj',     zone_name: 'Vasant Kunj',     risk_class: 'low',      risk_score: 0.18, predicted_calls: 1, timestamp: minsAgo(13) }
 ] as unknown as Hotspot[];
 
+// Used only when the real ambulance list is empty (e.g. backend still waking up)
 const DEMO_FLEET = { totalAmbulances: 27, available: 9, moving: 18, occupied: 0, maintenance: 0 };
 
 export const Dashboard: React.FC = () => {
   const { data: ambulances = [], isLoading: loadingAmbulances, refetch: refetchAmbulances } = useAmbulances();
-  const { data: liveHotspots = [], isLoading: loadingHotspots, refetch: refetchHotspots } = useHotspots();
+  const { isLoading: loadingHotspots, refetch: refetchHotspots } = useHotspots();
   const { status: allocationStatus } = useAutoAllocation(); // Automatic allocation runs every 30 mins
 
-  // Sample data appears instantly (even while loading) and is replaced by real data when it arrives.
-  const usingDemoHotspots = liveHotspots.length === 0;
+  // Zone predictions always come from the sample data above.
+  // To use real predictions again, replace DEMO_HOTSPOTS below with the live hotspots.
   const usingDemoFleet = ambulances.length === 0;
-  const usingDemo = usingDemoHotspots || usingDemoFleet;
-  const hotspots = usingDemoHotspots ? DEMO_HOTSPOTS : liveHotspots;
+  const hotspots = DEMO_HOTSPOTS;
 
   const autoFetchEnabled = useAppStore((state) => state.autoFetchEnabled);
   const setAutoFetchEnabled = useAppStore((state) => state.setAutoFetchEnabled);
@@ -57,20 +57,20 @@ export const Dashboard: React.FC = () => {
 
   const stats = {
     ...(usingDemoFleet ? DEMO_FLEET : liveFleet),
-    criticalZones: hotspots?.filter((h: Hotspot) => h.risk_class === 'critical').length || 0,
-    activeIncidents: hotspots?.filter((h: Hotspot) => h.predicted_calls > 5).length || 0,
+    criticalZones: hotspots.filter((h: Hotspot) => h.risk_class === 'critical').length,
+    activeIncidents: hotspots.filter((h: Hotspot) => h.predicted_calls > 5).length,
   };
 
   // Prepare chart data
   const riskDistribution = [
-    { risk: 'Critical', count: hotspots?.filter((h: Hotspot) => h.risk_class === 'critical').length || 0, fill: '#dc2626' },
-    { risk: 'High', count: hotspots?.filter((h: Hotspot) => h.risk_class === 'high').length || 0, fill: '#f97316' },
-    { risk: 'Medium', count: hotspots?.filter((h: Hotspot) => h.risk_class === 'medium').length || 0, fill: '#eab308' },
-    { risk: 'Low', count: hotspots?.filter((h: Hotspot) => h.risk_class === 'low').length || 0, fill: '#22c55e' },
+    { risk: 'Critical', count: hotspots.filter((h: Hotspot) => h.risk_class === 'critical').length, fill: '#dc2626' },
+    { risk: 'High', count: hotspots.filter((h: Hotspot) => h.risk_class === 'high').length, fill: '#f97316' },
+    { risk: 'Medium', count: hotspots.filter((h: Hotspot) => h.risk_class === 'medium').length, fill: '#eab308' },
+    { risk: 'Low', count: hotspots.filter((h: Hotspot) => h.risk_class === 'low').length, fill: '#22c55e' },
   ];
 
   // [...hotspots] makes a copy so sorting doesn't change the original data
-  const topHotspots = [...(hotspots || [])]
+  const topHotspots = [...hotspots]
     .sort((a: Hotspot, b: Hotspot) => b.predicted_calls - a.predicted_calls)
     .slice(0, 5)
     .map((h: Hotspot) => ({
@@ -86,7 +86,7 @@ export const Dashboard: React.FC = () => {
     { status: 'Maintenance', count: stats.maintenance, fill: '#64748b' },
   ];
 
-  const recentHotspots = [...(hotspots || [])]
+  const recentHotspots = [...hotspots]
     .sort((a: Hotspot, b: Hotspot) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 5);
 
@@ -102,11 +102,9 @@ export const Dashboard: React.FC = () => {
           <p className="mt-2 text-slate-600 dark:text-slate-400">
             Real-time ambulance optimization & demand prediction • {autoFetchEnabled ? 'Auto-updating every 12-15 minutes' : 'Manual mode - use refresh button below'}
           </p>
-          {usingDemo && (
-            <span className="mt-2 inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-              Sample data shown until live data arrives
-            </span>
-          )}
+          <span className="mt-2 inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+            Zone predictions shown are sample data
+          </span>
         </div>
 
         {/* Controls: Auto-Fetch Toggle & Manual Refresh */}
