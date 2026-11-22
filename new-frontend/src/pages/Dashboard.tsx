@@ -3,45 +3,24 @@ import { Truck, AlertTriangle, Activity, TrendingUp, Zap, CheckCircle, AlertCirc
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/Card';
 import { StatCard } from '@/components/StatCard';
 import { HotspotCard } from '@/components/HotspotCard';
-import { useAmbulances, useHotspots, useAutoAllocation } from '@/hooks/useData';
+import { useAmbulances, useHotspots, useAutoAllocation, USE_SAMPLE_DATA } from '@/hooks/useData';
 import { useAppStore } from '@/lib/store';
 import { Ambulance, Hotspot } from '@/lib/types';
 import { getZoneDisplayName } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { useQueryClient } from '@tanstack/react-query';
 
-// ─── Sample data: always used for zone predictions ───
-// Edit the numbers freely. risk_class must be: critical, high, medium or low.
-// risk_score is on a 0-1 scale here; change it if your model uses 0-100.
-const minsAgo = (m: number) => new Date(Date.now() - m * 60 * 1000).toISOString();
-
-const DEMO_HOTSPOTS = [
-  { id: 'demo-1',  zone_id: 'demo_connaught_place', area: 'Connaught Place', zone_name: 'Connaught Place', risk_class: 'critical', risk_score: 0.91, predicted_calls: 9, timestamp: minsAgo(2) },
-  { id: 'demo-2',  zone_id: 'demo_chandni_chowk',   area: 'Chandni Chowk',   zone_name: 'Chandni Chowk',   risk_class: 'critical', risk_score: 0.88, predicted_calls: 8, timestamp: minsAgo(3) },
-  { id: 'demo-3',  zone_id: 'demo_karol_bagh',      area: 'Karol Bagh',      zone_name: 'Karol Bagh',      risk_class: 'high',     risk_score: 0.79, predicted_calls: 7, timestamp: minsAgo(4) },
-  { id: 'demo-4',  zone_id: 'demo_lajpat_nagar',    area: 'Lajpat Nagar',    zone_name: 'Lajpat Nagar',    risk_class: 'high',     risk_score: 0.74, predicted_calls: 6, timestamp: minsAgo(5) },
-  { id: 'demo-5',  zone_id: 'demo_nehru_place',     area: 'Nehru Place',     zone_name: 'Nehru Place',     risk_class: 'high',     risk_score: 0.70, predicted_calls: 6, timestamp: minsAgo(6) },
-  { id: 'demo-6',  zone_id: 'demo_saket',           area: 'Saket',           zone_name: 'Saket',           risk_class: 'medium',   risk_score: 0.55, predicted_calls: 4, timestamp: minsAgo(7) },
-  { id: 'demo-7',  zone_id: 'demo_mayur_vihar',     area: 'Mayur Vihar',     zone_name: 'Mayur Vihar',     risk_class: 'medium',   risk_score: 0.52, predicted_calls: 4, timestamp: minsAgo(8) },
-  { id: 'demo-8',  zone_id: 'demo_rohini',          area: 'Rohini',          zone_name: 'Rohini',          risk_class: 'medium',   risk_score: 0.47, predicted_calls: 3, timestamp: minsAgo(9) },
-  { id: 'demo-9',  zone_id: 'demo_pitampura',       area: 'Pitampura',       zone_name: 'Pitampura',       risk_class: 'medium',   risk_score: 0.44, predicted_calls: 3, timestamp: minsAgo(10) },
-  { id: 'demo-10', zone_id: 'demo_janakpuri',       area: 'Janakpuri',       zone_name: 'Janakpuri',       risk_class: 'low',      risk_score: 0.28, predicted_calls: 2, timestamp: minsAgo(11) },
-  { id: 'demo-11', zone_id: 'demo_dwarka',          area: 'Dwarka',          zone_name: 'Dwarka',          risk_class: 'low',      risk_score: 0.22, predicted_calls: 1, timestamp: minsAgo(12) },
-  { id: 'demo-12', zone_id: 'demo_vasant_kunj',     area: 'Vasant Kunj',     zone_name: 'Vasant Kunj',     risk_class: 'low',      risk_score: 0.18, predicted_calls: 1, timestamp: minsAgo(13) }
-] as unknown as Hotspot[];
-
 // Used only when the real ambulance list is empty (e.g. backend still waking up)
 const DEMO_FLEET = { totalAmbulances: 27, available: 9, moving: 18, occupied: 0, maintenance: 0 };
 
 export const Dashboard: React.FC = () => {
   const { data: ambulances = [], isLoading: loadingAmbulances, refetch: refetchAmbulances } = useAmbulances();
-  const { isLoading: loadingHotspots, refetch: refetchHotspots } = useHotspots();
+  // Zone predictions come from the shared hook (sample data while USE_SAMPLE_DATA is true)
+  const { data: hotspots = [], isLoading: loadingHotspots, refetch: refetchHotspots } = useHotspots();
   const { status: allocationStatus } = useAutoAllocation(); // Automatic allocation runs every 30 mins
 
-  // Zone predictions always come from the sample data above.
-  // To use real predictions again, replace DEMO_HOTSPOTS below with the live hotspots.
   const usingDemoFleet = ambulances.length === 0;
-  const hotspots = DEMO_HOTSPOTS;
+  const usingDemo = USE_SAMPLE_DATA || usingDemoFleet;
 
   const autoFetchEnabled = useAppStore((state) => state.autoFetchEnabled);
   const setAutoFetchEnabled = useAppStore((state) => state.setAutoFetchEnabled);
@@ -102,9 +81,7 @@ export const Dashboard: React.FC = () => {
           <p className="mt-2 text-slate-600 dark:text-slate-400">
             Real-time ambulance optimization & demand prediction • {autoFetchEnabled ? 'Auto-updating every 12-15 minutes' : 'Manual mode - use refresh button below'}
           </p>
-          <span className="mt-2 inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-            Zone predictions shown are sample data
-          </span>
+          
         </div>
 
         {/* Controls: Auto-Fetch Toggle & Manual Refresh */}

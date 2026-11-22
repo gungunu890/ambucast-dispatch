@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ambulanceAPI, predictionAPI, allocationAPI, mlAPI, socket } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
+import { DEMO_HOTSPOTS } from '@/lib/demoData';
+
+// Set to true to show sample zone predictions on every page.
+// Set to false to go back to real predictions from the backend.
+export const USE_SAMPLE_DATA = true;
 
 // Auto-fetch ambulances with 15 min intervals, real-time updates via Socket.IO
 export const useAmbulances = () => {
@@ -40,14 +45,25 @@ export const useAmbulances = () => {
 };
 
 // Auto-fetch hotspots with 12 min intervals using the backend pipeline
+// (or return the shared sample data when USE_SAMPLE_DATA is true)
 export const useHotspots = () => {
   const setHotspots = useAppStore((state) => state.setHotspots);
   const autoFetchEnabled = useAppStore((state) => state.autoFetchEnabled);
   const queryClient = useQueryClient();
 
+  // Some pages read hotspots from the store, so fill the store with the sample data too
+  useEffect(() => {
+    if (USE_SAMPLE_DATA) {
+      setHotspots(DEMO_HOTSPOTS);
+    }
+  }, [setHotspots]);
+
   const query = useQuery({
     queryKey: ['hotspots'],
     queryFn: async () => {
+      if (USE_SAMPLE_DATA) {
+        return DEMO_HOTSPOTS;
+      }
       try {
         const response = await predictionAPI.getHotspots();
         setHotspots(response.data);
@@ -57,7 +73,9 @@ export const useHotspots = () => {
         return [];
       }
     },
-    refetchInterval: autoFetchEnabled ? 12 * 60 * 1000 : false, // 12 minutes if enabled
+    // initialData makes the sample data available on the very first render
+    initialData: USE_SAMPLE_DATA ? DEMO_HOTSPOTS : undefined,
+    refetchInterval: !USE_SAMPLE_DATA && autoFetchEnabled ? 12 * 60 * 1000 : false, // 12 minutes if enabled
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
   });
