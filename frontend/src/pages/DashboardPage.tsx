@@ -6,10 +6,7 @@ import {
   Activity,
   TrendingUp,
   Zap,
-  CheckCircle,
-  AlertCircle,
-  RefreshCw,
-  Power,
+  MapPin,
 } from 'lucide-react';
 
 import {
@@ -21,18 +18,6 @@ import {
 } from '@/components/Card';
 
 import { StatCard } from '@/components/StatCard';
-import { HotspotCard } from '@/components/HotspotCard';
-
-import {
-  useAmbulances,
-  useHotspots,
-  useAutoAllocation,
-} from '@/hooks/useData';
-
-import { useAppStore } from '@/lib/store';
-import { Hotspot } from '@/lib/types';
-import { getZoneDisplayName } from '@/lib/utils';
-import { zones as DEMO_ZONES, ambulances as DEMO_AMBULANCES } from '@/lib/demoData';
 
 import {
   BarChart,
@@ -50,241 +35,115 @@ import {
   Cell,
 } from 'recharts';
 
+// Hardcoded zone data
+const zones = [
+  { id: 'Z01', name: 'Connaught Place', risk: 'HIGH', calls: 14, aqi: 312, temp: 38, elderly: 18, humidity: 72 },
+  { id: 'Z02', name: 'Karol Bagh', risk: 'MODERATE', calls: 8, aqi: 198, temp: 36, elderly: 22, humidity: 65 },
+  { id: 'Z03', name: 'Chandni Chowk', risk: 'CRITICAL', calls: 22, aqi: 420, temp: 41, elderly: 28, humidity: 80 },
+  { id: 'Z04', name: 'Dwarka', risk: 'LOW', calls: 3, aqi: 120, temp: 34, elderly: 12, humidity: 55 },
+  { id: 'Z05', name: 'Saket', risk: 'LOW', calls: 5, aqi: 145, temp: 35, elderly: 15, humidity: 58 },
+  { id: 'Z06', name: 'Rohini', risk: 'MODERATE', calls: 10, aqi: 230, temp: 37, elderly: 20, humidity: 68 },
+  { id: 'Z07', name: 'Lajpat Nagar', risk: 'HIGH', calls: 16, aqi: 340, temp: 39, elderly: 25, humidity: 75 },
+  { id: 'Z08', name: 'Janakpuri', risk: 'LOW', calls: 4, aqi: 110, temp: 33, elderly: 10, humidity: 52 },
+  { id: 'Z09', name: 'Pitampura', risk: 'MODERATE', calls: 9, aqi: 210, temp: 36, elderly: 19, humidity: 63 },
+  { id: 'Z10', name: 'Nehru Place', risk: 'HIGH', calls: 13, aqi: 290, temp: 38, elderly: 21, humidity: 70 },
+  { id: 'Z11', name: 'Mayur Vihar', risk: 'CRITICAL', calls: 19, aqi: 380, temp: 40, elderly: 26, humidity: 78 },
+  { id: 'Z12', name: 'Vasant Kunj', risk: 'LOW', calls: 2, aqi: 95, temp: 32, elderly: 8, humidity: 50 },
+] as const;
+
+// Hardcoded ambulance data
+const ambulances = [
+  { id: 'A-01', zone: 'Z01', status: 'Busy' },
+  { id: 'A-02', zone: 'Z03', status: 'Busy' },
+  { id: 'A-03', zone: 'Z04', status: 'Idle' },
+  { id: 'A-04', zone: 'Z05', status: 'Moving' },
+  { id: 'A-05', zone: 'Z07', status: 'Busy' },
+  { id: 'A-06', zone: 'Z08', status: 'Idle' },
+  { id: 'A-07', zone: 'Z02', status: 'Idle' },
+  { id: 'A-08', zone: 'Z06', status: 'Moving' },
+  { id: 'A-09', zone: 'Z10', status: 'Busy' },
+  { id: 'A-10', zone: 'Z12', status: 'Idle' },
+] as const;
+
+const riskColors: Record<string, string> = {
+  CRITICAL: '#dc2626',
+  HIGH: '#f97316',
+  MODERATE: '#eab308',
+  LOW: '#22c55e',
+};
+
+const getRiskClass = (risk: string) => {
+  switch (risk) {
+    case 'CRITICAL':
+      return 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300';
+    case 'HIGH':
+      return 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300';
+    case 'MODERATE':
+      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300';
+    default:
+      return 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300';
+  }
+};
+
 export const Dashboard: React.FC = () => {
-  const { refetch: refetchAmbulances } = useAmbulances();
-  const { refetch: refetchHotspots } = useHotspots();
-  const { status: allocationStatus } = useAutoAllocation();
-
-  const autoFetchEnabled = useAppStore(
-    (state) => state.autoFetchEnabled
-  );
-
-  const setAutoFetchEnabled = useAppStore(
-    (state) => state.setAutoFetchEnabled
-  );
-
-  // Convert hardcoded ambulance data
-  const ambulances = DEMO_AMBULANCES.map((ambulance) => ({
-    ...ambulance,
-    status:
-      ambulance.status === 'Idle'
-        ? 'AVAILABLE'
-        : ambulance.status === 'Moving'
-        ? 'MOVING'
-        : ambulance.status === 'Busy'
-        ? 'OCCUPIED'
-        : 'MAINTENANCE',
-  }));
-
-  // Convert hardcoded zones into hotspot data
-  const hotspots: Hotspot[] = DEMO_ZONES.map((zone) => {
-    const risk = String(zone.risk).toLowerCase();
-
-    const riskScores: Record<string, number> = {
-      critical: 90,
-      high: 75,
-      medium: 50,
-      low: 25,
-    };
-
-    return {
-      id: String(zone.id),
-      zone_id: String(zone.id),
-      zone_name: zone.name,
-      area: zone.name,
-      risk_class: risk,
-      predicted_calls: Number(zone.calls),
-      risk_score: riskScores[risk] ?? 0,
-      timestamp: new Date().toISOString(),
-    } as unknown as Hotspot;
-  });
-
   // Dashboard statistics
   const stats = {
     totalAmbulances: ambulances.length,
-
-    available: ambulances.filter(
-      (a) => a.status === 'AVAILABLE'
-    ).length,
-
-    moving: ambulances.filter(
-      (a) => a.status === 'MOVING'
-    ).length,
-
-    occupied: ambulances.filter(
-      (a) => a.status === 'OCCUPIED'
-    ).length,
-
-    maintenance: ambulances.filter(
-      (a) => a.status === 'MAINTENANCE'
-    ).length,
-
-    criticalZones: DEMO_ZONES.filter(
-      (zone) => String(zone.risk).toLowerCase() === 'critical'
-    ).length,
-
-    activeIncidents: DEMO_ZONES.reduce(
-      (total, zone) => total + Number(zone.calls || 0),
-      0
-    ),
+    available: ambulances.filter((a) => a.status === 'Idle').length,
+    moving: ambulances.filter((a) => a.status === 'Moving').length,
+    occupied: ambulances.filter((a) => a.status === 'Busy').length,
+    criticalZones: zones.filter((z) => z.risk === 'CRITICAL').length,
+    activeIncidents: zones.reduce((total, z) => total + z.calls, 0),
   };
 
   // Risk distribution
   const riskDistribution = [
-    {
-      risk: 'Critical',
-      count: hotspots.filter((h) => h.risk_class === 'critical').length,
-      fill: '#dc2626',
-    },
-    {
-      risk: 'High',
-      count: hotspots.filter((h) => h.risk_class === 'high').length,
-      fill: '#f97316',
-    },
-    {
-      risk: 'Medium',
-      count: hotspots.filter((h) => h.risk_class === 'medium').length,
-      fill: '#eab308',
-    },
-    {
-      risk: 'Low',
-      count: hotspots.filter((h) => h.risk_class === 'low').length,
-      fill: '#22c55e',
-    },
+    { risk: 'Critical', count: zones.filter((z) => z.risk === 'CRITICAL').length, fill: riskColors.CRITICAL },
+    { risk: 'High', count: zones.filter((z) => z.risk === 'HIGH').length, fill: riskColors.HIGH },
+    { risk: 'Moderate', count: zones.filter((z) => z.risk === 'MODERATE').length, fill: riskColors.MODERATE },
+    { risk: 'Low', count: zones.filter((z) => z.risk === 'LOW').length, fill: riskColors.LOW },
   ];
-
-  // Top demand zones
-  const topHotspots = [...hotspots]
-    .sort((a, b) => b.predicted_calls - a.predicted_calls)
-    .slice(0, 5)
-    .map((h) => ({
-      zone: h.area || h.zone_name || getZoneDisplayName(h.zone_id),
-      calls: h.predicted_calls,
-      risk: h.risk_score,
-    }));
 
   // Fleet status
   const statusBreakdown = [
     { status: 'Available', count: stats.available, fill: '#22c55e' },
     { status: 'Moving', count: stats.moving, fill: '#3b82f6' },
-    { status: 'Occupied', count: stats.occupied, fill: '#ef4444' },
-    { status: 'Maintenance', count: stats.maintenance, fill: '#64748b' },
+    { status: 'Busy', count: stats.occupied, fill: '#ef4444' },
   ];
 
-  // Recent predictions
-  const recentHotspots = [...hotspots]
-    .sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() -
-        new Date(a.timestamp).getTime()
-    )
-    .slice(0, 5);
+  // Highest demand zones
+  const topHotspots = [...zones]
+    .sort((a, b) => b.calls - a.calls)
+    .slice(0, 5)
+    .map((z) => ({
+      zone: z.name,
+      calls: z.calls,
+      risk: z.risk === 'CRITICAL' ? 90 : z.risk === 'HIGH' ? 75 : z.risk === 'MODERATE' ? 50 : 25,
+    }));
+
+  // Zones displayed in recent predictions
+  const recentZones = [...zones]
+    .sort((a, b) => b.calls - a.calls)
+    .slice(0, 6);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-4xl font-bold flex items-center gap-2">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
             <Activity className="text-blue-600" />
             Emergency Response Dashboard
           </h1>
-
-          <p className="mt-2 text-slate-600 dark:text-slate-400">
-            Ambulance optimization & demand prediction
-            {' • '}
-            {autoFetchEnabled
-              ? 'Auto-updating enabled'
-              : 'Manual mode - use refresh button below'}
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Ambulance optimization and emergency demand overview
           </p>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => setAutoFetchEnabled(!autoFetchEnabled)}
-            className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
-              autoFetchEnabled
-                ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200'
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200'
-            }`}
-          >
-            <Power className="h-4 w-4" />
-            {autoFetchEnabled ? 'Auto-Fetch ON' : 'Auto-Fetch OFF'}
-          </button>
-
-          <button
-            onClick={() => {
-              refetchAmbulances();
-              refetchHotspots();
-            }}
-            className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh Now
-          </button>
         </div>
       </div>
 
-      {/* Allocation Status */}
-      <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950">
-        <CardContent className="pt-6 flex items-center gap-4">
-
-          {allocationStatus === 'running' && (
-            <>
-              <div className="animate-spin">
-                <Zap className="text-blue-600 h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-medium">Running Allocation Algorithm...</p>
-                <p className="text-sm text-slate-600">
-                  Optimizing ambulance dispatch
-                </p>
-              </div>
-            </>
-          )}
-
-          {allocationStatus === 'success' && (
-            <>
-              <CheckCircle className="text-green-600 h-5 w-5" />
-              <div>
-                <p className="font-medium">Allocation Optimized ✓</p>
-                <p className="text-sm text-slate-600">
-                  Last run completed successfully
-                </p>
-              </div>
-            </>
-          )}
-
-          {allocationStatus === 'error' && (
-            <>
-              <AlertCircle className="text-red-600 h-5 w-5" />
-              <div>
-                <p className="font-medium">Allocation Error</p>
-                <p className="text-sm text-slate-600">
-                  The allocation algorithm encountered an error
-                </p>
-              </div>
-            </>
-          )}
-
-          {allocationStatus === 'idle' && (
-            <>
-              <CheckCircle className="text-slate-400 h-5 w-5" />
-              <div>
-                <p className="font-medium">System Idle</p>
-                <p className="text-sm text-slate-600">
-                  Waiting for the next scheduled allocation run
-                </p>
-              </div>
-            </>
-          )}
-
-        </CardContent>
-      </Card>
-
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
 
         <StatCard
           title="Total Ambulances"
@@ -299,7 +158,7 @@ export const Dashboard: React.FC = () => {
           value={stats.available}
           icon={Activity}
           color="green"
-          trend={stats.available > 0 ? 'up' : 'down'}
+          trend="up"
         />
 
         <StatCard
@@ -307,7 +166,7 @@ export const Dashboard: React.FC = () => {
           value={stats.moving}
           icon={Zap}
           color="blue"
-          trend={stats.moving > 0 ? 'up' : 'down'}
+          trend="up"
         />
 
         <StatCard
@@ -315,7 +174,7 @@ export const Dashboard: React.FC = () => {
           value={stats.criticalZones}
           icon={AlertTriangle}
           color="red"
-          trend={stats.criticalZones > 0 ? 'up' : 'down'}
+          trend="up"
         />
 
         <StatCard
@@ -329,26 +188,24 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle>Risk Distribution</CardTitle>
-            <CardDescription>
-              Current zones by risk level
-            </CardDescription>
+            <CardDescription>Risk levels across 12 Delhi zones</CardDescription>
           </CardHeader>
 
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={riskDistribution}>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={riskDistribution} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="risk" />
-                <YAxis />
+                <YAxis allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#3b82f6">
+                <Bar dataKey="count" name="Zones" radius={[5, 5, 0, 0]}>
                   {riskDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={index} fill={entry.fill} />
                   ))}
                 </Bar>
               </BarChart>
@@ -357,31 +214,29 @@ export const Dashboard: React.FC = () => {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle>Fleet Status</CardTitle>
-            <CardDescription>
-              {stats.totalAmbulances} ambulances total
-            </CardDescription>
+            <CardDescription>{stats.totalAmbulances} ambulances in the fleet</CardDescription>
           </CardHeader>
 
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
                   data={statusBreakdown}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ status, count }) => `${status}: ${count}`}
-                  outerRadius={100}
-                  fill="#8884d8"
+                  outerRadius={85}
                   dataKey="count"
+                  nameKey="status"
+                  label={({ name, value }) => `${name}: ${value}`}
                 >
                   {statusBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={index} fill={entry.fill} />
                   ))}
                 </Pie>
                 <Tooltip />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -389,90 +244,129 @@ export const Dashboard: React.FC = () => {
 
       </div>
 
-      {/* Top Demand Zones */}
+      {/* Demand Chart */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-2">
           <CardTitle>Top Predicted Demand Zones</CardTitle>
-          <CardDescription>
-            Top 5 zones with highest predicted emergency calls
-          </CardDescription>
+          <CardDescription>Zones ranked by emergency call volume</CardDescription>
         </CardHeader>
 
         <CardContent>
-          {topHotspots.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={topHotspots}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="zone" />
-                <YAxis
-                  yAxisId="left"
-                  label={{
-                    value: 'Calls',
-                    angle: -90,
-                    position: 'insideLeft',
-                  }}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  label={{
-                    value: 'Risk Score',
-                    angle: 90,
-                    position: 'insideRight',
-                  }}
-                />
-                <Tooltip />
-                <Legend />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="calls"
-                  stroke="#3b82f6"
-                  name="Predicted Calls"
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="risk"
-                  stroke="#ef4444"
-                  name="Risk Score"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-slate-500">
-              No hotspot data available.
-            </div>
-          )}
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={topHotspots} margin={{ top: 10, right: 15, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="zone" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="left" allowDecimals={false} />
+              <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
+              <Tooltip />
+              <Legend />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="calls"
+                stroke="#3b82f6"
+                strokeWidth={3}
+                name="Emergency Calls"
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="risk"
+                stroke="#ef4444"
+                strokeWidth={2}
+                name="Risk Score"
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
 
-      {/* Recent Predictions */}
+      {/* Zone Overview */}
       <div>
-        <h2 className="text-2xl font-bold mb-4">
-          Recent Predictions
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-xl font-bold">Zone Overview</h2>
+            <p className="text-sm text-slate-500">
+              Emergency demand and environmental conditions
+            </p>
+          </div>
+          <span className="text-sm text-slate-500">12 Zones</span>
+        </div>
 
-        <p className="text-slate-600 dark:text-slate-400 mb-4">
-          Latest demand predictions
-        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {recentZones.map((zone) => (
+            <Card key={zone.id} className="shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <h3 className="font-semibold">{zone.name}</h3>
+                    <p className="text-xs text-slate-500">{zone.id}</p>
+                  </div>
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${getRiskClass(zone.risk)}`}>
+                    {zone.risk}
+                  </span>
+                </div>
 
-        {recentHotspots.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {recentHotspots.map((hotspot) => (
-              <HotspotCard key={hotspot.id} hotspot={hotspot} />
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div>
+                    <p className="text-xs text-slate-500">Predicted Calls</p>
+                    <p className="text-xl font-bold">{zone.calls}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">AQI</p>
+                    <p className="text-xl font-bold">{zone.aqi}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Temperature</p>
+                    <p className="font-semibold">{zone.temp}°C</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Humidity</p>
+                    <p className="font-semibold">{zone.humidity}%</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Ambulance Fleet */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Ambulance Fleet</CardTitle>
+          <CardDescription>Current ambulance assignments and availability</CardDescription>
+        </CardHeader>
+
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {ambulances.map((ambulance) => (
+              <div
+                key={ambulance.id}
+                className="border rounded-lg p-3 flex items-center justify-between gap-2"
+              >
+                <div>
+                  <p className="font-semibold text-sm">{ambulance.id}</p>
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                    <MapPin size={12} />
+                    {ambulance.zone}
+                  </p>
+                </div>
+
+                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                  ambulance.status === 'Idle'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
+                    : ambulance.status === 'Moving'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                    : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                }`}>
+                  {ambulance.status}
+                </span>
+              </div>
             ))}
           </div>
-        ) : (
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-center text-slate-600">
-                No hotspots available.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
     </div>
   );
